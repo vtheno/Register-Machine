@@ -507,22 +507,22 @@ class Machine(object):
         temp = int(raw_input("read>> "))
         return temp
 
-    def flip(self):
-        """
-        # flip is gc last op flip data memory 
-        ['assgin','temp',['reg','the-cdrs']],
-        ['assgin','the-cdrs',['reg','new-cdrs']],
-        ['assgin','new-cdrs',['reg','temp']],
-        ['assgin','temp',['reg','the-cars']],
-        ['assgin','the-cars',['reg','new-cars']],
-        ['assgin','new-cars',['reg','temp']],
-        """
-        self.assgin('temp',['reg','the-cdrs'])
-        self.assgin('the-cdrs',['reg','new-cdrs'])
-        self.assgin('new-cdrs',['reg','temp'])
-        self.assgin('temp',['reg','the-cars'])
-        self.assgin('the-cars',['reg','new-cars'])
-        self.assgin('new-cars',['reg','temp'])
+    #def flip(self):
+    #    """
+    #    # flip is gc last op flip data memory 
+    #    ['assgin','temp',['reg','the-cdrs']],
+    #    ['assgin','the-cdrs',['reg','new-cdrs']],
+    #    ['assgin','new-cdrs',['reg','temp']],
+    #    ['assgin','temp',['reg','the-cars']],
+    #    ['assgin','the-cars',['reg','new-cars']],
+    #    ['assgin','new-cars',['reg','temp']],
+    #    """
+    #    self.assgin('temp',['reg','the-cdrs'])
+    #    self.assgin('the-cdrs',['reg','new-cdrs'])
+    #    self.assgin('new-cdrs',['reg','temp'])
+    #    self.assgin('temp',['reg','the-cars'])
+    #    self.assgin('the-cars',['reg','new-cars'])
+    #    self.assgin('new-cars',['reg','temp'])
 
 m = Machine()
 m.setMachineReg('a','b','c','the-stack')
