@@ -206,7 +206,7 @@ a.define_sym('shard','huk')
 a.display_all_mem()
 a.root[0] = ('c',a.make_pointer(0))
 a.root[1] = ('shard',a.make_pointer(0))
-a.the_cars.set(3,a.make_pointer(0))
+a.the_cdrs.set(3,a.make_pointer(0))
 a.gc()
 a.display_all_mem()
 
