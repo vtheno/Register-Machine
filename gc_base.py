@@ -201,13 +201,12 @@ class gc(object):
         return True
 a = gc()
 a.display_all_mem()
-a.define_sym('a',1)
-a.define_sym('b','b')
-a.define_sym('c',List() )
-a.define_sym('a',List(1,2,3,4,5) )
-a.define_sym('b',List(1,2,3,4) )
-# define_sym equal const xxx
+a.define_sym('c',List(1,2,3,4))
 a.define_sym('shard','huk')
 a.display_all_mem()
-#a.display_all_mem()
-#print a.lengthx(List(1,2,3))
+a.root[0] = ('c',a.make_pointer(0))
+a.root[1] = ('shard',a.make_pointer(0))
+a.the_cars.set(3,a.make_pointer(0))
+a.gc()
+a.display_all_mem()
+
