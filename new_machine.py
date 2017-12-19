@@ -6,6 +6,7 @@ def show(machine):
         print '<',i,':',v,'>'
     print machine.labels
     print machine.stack
+    print machine.display_all_mem()
     print '--------------------end'
 
 class Error(Exception): pass
@@ -18,25 +19,6 @@ def checkWapper(value,Type,error):
                                                        type(value),
                                                           Type
                                                       ))
-
-class Register(object):
-    def __init__(self,value):
-        self.value = value
-    def get(self):
-        return self.value
-    def set(self,value):
-        # 5.3 的时候这里会修改成 支持 vector 和 int
-        # 其实这里修改成支持指针的操作会比较好 
-        # class ptr(object) 
-        class RegisterSetError(Error): pass
-        #self.value = checkWapper(value,int,RegisterSetError)
-        #if isinstance(value,Point):
-        #    self.value = value.pGet()
-        #else:
-        self.value = value
-    def __repr__(self):
-        return "< Register {} >".format(self.value)
-    
 class Vector(object):
     def __init__(self,size,symbol):
         self.value = [symbol] * size
@@ -46,18 +28,68 @@ class Vector(object):
         self.value[index] = value
     def __repr__(self):
         return repr(self.value)
+
+class Register(object):
+    def __init__(self,value):
+        self.value = value
+    def get(self):
+        return self.value
+    def set(self,value):
+        # class ptr(object) 
+        class RegisterSetError(Error): pass
+        self.value = value
+    def __repr__(self):
+        return "< Register {} >".format(self.value)
+    
 class TypeData(object):
     def __init__(self,tag,val):
         self.tag = tag
         self.val = val
     def __repr__(self):
         return repr("{}{}".format(self.tag,self.val))
-    
+
+class Cons(object):
+    def __init__(self,a,b):
+        self.first = a
+        self.rest  = b
+    def isNull(self):
+        #return self.first == empty and self.rest == empty
+        return self.first == None and self.rest == None
+    def __repr__(self):
+        if self.isNull():
+            return "nil"
+        else:
+            return "( {} . {} )".format(self.first,self.rest)
+
+nil  = Cons(None,None)
+
+def List(*pylst):
+    lst = list(pylst)
+    if len(lst) > 0:
+        car,cdr = lst[0],lst[1:]
+    else:
+        return nil
+    if cdr == []:
+        return Cons(car,nil)
+    return Cons(car,List(*cdr))
+
 class Machine(object):
     pc             = Register( 0 )
     flag           = Register( 0 )
     # memory 
-    
+    root = [] # root is object table
+    mem_size = 15
+    n = 'n'
+    e = 'e'
+    s = 's'
+    p = 'p'
+    the_empty = TypeData(e,0)
+    the_free = 0
+    the_cars = Vector(mem_size,'**')
+    the_cdrs = Vector(mem_size,'**')
+    new_free = 0
+    new_cars = Vector(mem_size,'**')
+    new_cdrs = Vector(mem_size,'**')
     # disk         = Disk()
     # base op start
     def reg(self,name):
@@ -67,18 +99,152 @@ class Machine(object):
             raise MachineRegError("{} not in reg table".format(name))
         return self.register_table.get(name).get()
         
+
+
+    def display_all_mem(self):
+        print "root____:",self.root
+        print "the_free:",self.the_free
+        print "the_cars:",self.the_cars
+        print "the_cdrs:",self.the_cdrs
+        print "new_free:",self.new_free
+        print "new_cars:",self.new_cars
+        print "new_cdrs:",self.new_cdrs
+
+    def make_pointer(self,val):
+        return TypeData(self.p,val)
+    def make_broken_heart(self):
+        return TypeData('bh',0)
+    def makeTypeData(self,val):
+        print "makeTypeData:",val,type(val),isinstance(val,Cons)
+        if isinstance(val,int):
+            return TypeData('n',val)
+        if isinstance(val,str):
+            return TypeData('s',val)
+        if isinstance(val,Cons):
+            if val.isNull() :
+                return TypeData('e',0)
+            else:
+                return self.store_list(val)
+        else:
+            raise Error("makeTypeDataError:",val)
+    def lengthx(self,lst):
+        if lst.isNull():
+            return 0
+        elif isinstance(lst.first,Cons):
+            return 1 + self.lengthx(lst.first) + self.lengthx(lst.rest)
+        else:
+            return 1 + self.lengthx(lst.rest)
+
+    def size(self,val):
+        if isinstance(val,Cons):
+            return self.lengthx(val)
+        return 0
+    def storage_space_available(self):
+        return self.mem_size - self.the_free
+    def sufficient_space_for(self,val):
+        needsize = self.size(val)
+        flag     = needsize <= self.storage_space_available()
+        print flag,needsize,self.storage_space_available()
+        if flag:
+            return flag
+        else:
+            return self.gc() and flag
+    def define_sym(self,var,val):
+        if self.sufficient_space_for(val):
+            value = self.makeTypeData(val)
+            # namespace is self.root then can changed to dict map or other data struct 
+            self.root.append( (var,value) )
+            return self.root
+        else:
+            raise Error( "define-sym: insufficient space for {}".format(val))
+    def store_list(self,lst):
+        loc = self.the_free
+        self.the_free += 1
+        print "store_list:",lst,loc
+        # there can change data type to py list
+        if isinstance(lst.first,Cons):
+            self.the_cars.set(loc,self.store_list(lst.first))
+        else:
+            self.the_cars.set(loc,self.makeTypeData(lst.first))
+        if isinstance(lst.rest,Cons):
+            if not lst.rest.isNull():
+                self.the_cdrs.set(loc,self.store_list(lst.rest))
+            else:
+                self.the_cdrs.set(loc,self.the_empty)
+        return self.make_pointer(loc)
+
+    def forwarded(self,ptr):
+        flag1 = ptr.tag == self.p # pointer? ptr
+        flag2 = self.the_cars.ref(ptr.val).tag == 'bh' # broken_heart?
+        return flag1 and flag2
+    def forwarding_addr(self,ptr):
+        return self.the_cdrs.ref(ptr.val)
+    def move(self,ptr):
+        print "move:",ptr
+        if self.forwarded(ptr):
+            return self.forwarding_addr(ptr)
+        else:
+            loc = self.new_free
+            old_loc = ptr.val
+            self.new_free += 1
+            self.new_cars.set(loc,self.the_cars.ref( old_loc) )
+            self.new_cdrs.set(loc,self.the_cdrs.ref( old_loc) )
+            self.the_cars.set(old_loc,self.make_broken_heart())
+            new_addr = self.make_pointer(loc)
+            self.the_cdrs.set(old_loc,new_addr)
+            return new_addr
+
+    def scan(self,addr):
+        while addr < self.new_free:
+            ncar = self.new_cars.ref(addr)
+            ncdr = self.new_cdrs.ref(addr)
+            if ncar.tag == self.p:
+                self.new_cars.set(addr,self.move(ncar))
+            if ncdr.tag == self.p:
+                self.new_cdrs.set(addr,self.move(ncdr))
+            #self.scan(addr+1)
+            addr+=1 
+
+    def atomData(self,xxx):
+        return xxx[1].tag in [self.e,self.s,self.n]
+    def listData(self,xxx):
+        return xxx[1].tag in [self.p]
+    def new_frame(self,old_frame):
+        var = old_frame[0]
+        typed_data = old_frame[1]
+        td = self.move(typed_data)
+        return (var,td)
+    def process(self,table):
+        print "process:",table
+        res = [ ]
+        for i in table:
+            print "process:",res
+            if self.atomData(i):
+                res.append(i)
+            if self.listData(i):
+                res.append( self.new_frame(i) )
+        print "process:",res
+        return res
+    def flip(self):
+        self.the_cars,self.new_cars = self.new_cars,self.the_cars
+        self.the_cdrs,self.new_cdrs = self.new_cdrs,self.the_cdrs
+        self.the_free,self.new_free = self.new_free,0
+    def gc(self):
+        print "root:",self.root
+        self.root = self.process(self.root)
+        self.scan(0)
+        self.flip()
+        return True
+
     def const(self,constant_value):
         class MachineConstError(Error):pass
         checkWapper(constant_value,str,MachineConstError)
         if constant_value.isdigit():
-            return Point( int(constant_value) )
-        else:
-            if constant_value == '()':
-                # nil 
-                return 
-            if constant_value == 'Bh':
-                # broken_heart 
-                return 
+            # 不应该是在这里 这里应该只是返回类型解析 
+            # 由 assgin 对 寄存器进行操作 root 维护的是寄存器名表
+            return self.define_sym('var',int(constant_value))
+        if constant_value.isalpha():
+            return self.define_sym('var',constant_value)
             
     def label(self,label_name):
         class MachineLabelError(Error):pass
@@ -107,7 +273,7 @@ class Machine(object):
             raise SetMachineRegisterError
         for reg in RegNames:
             if reg not in ['pc','flag']:
-                self.register_table[reg] = Register()
+                self.register_table[reg] = Register( 0 )
             else:
                 raise SetMachineRegisterError("pc,flag is base reg ,but you set {}".format(reg))
         
@@ -320,13 +486,6 @@ class Machine(object):
             '+'     : self.add,
             '='     : self.eq,
             'read'  : self.read,
-            'vector-ref':self.vector_ref,
-            'vector-set':self.vector_set,
-            'cons'      :self.cons,
-            'pair?'     :self.isPair,
-            'broken-heart?':self.isBroken_heart,
-            'flip'         :self.flip,
-            'gc'           :self.gc,
         }
     def lt(self,a,b):
         flag = a < b
@@ -369,61 +528,9 @@ m = Machine()
 m.setMachineReg('a','b','c','the-stack')
 
 m.putControllerSeq(
-#    ['main'],
-#    ['assgin','a',['const','233']],
-#    ['test',['op','=',['const','233'],['reg','a']]],
-#    ['save','a'],
-#    ['restore','b'],
-#    ['goto',['label','done']],
-#    #['branch',['label','main']],
-#    ['done'],
-#    )
-# (set-car index value)
-    ['assgin','the-stack',['const','()']],# init stack
+    ['main'],
     ['assgin','a',['const','233']],
-    ['assgin','the-stack',['op','cons',['reg','a'],['reg','the-stack']]],#push
-    ['assgin','the-stack',['op','cons',['reg','a'],['reg','the-stack']]],#push
-    ['assgin','the-stack',['op','cons',['reg','a'],['reg','the-stack']]],#push
-    ['assgin','the-stack',['op','cons',['reg','a'],['reg','the-stack']]],#push
-    ['assgin','b',['op','vector-ref',['reg','the-cars'],['reg','the-stack']]],# pop
-    ['assgin','the-stack',['op','vector-ref',['reg','the-cdrs'],['reg','the-stack']]],# pop 
-    ['assgin','the-stack',['op','cons',['reg','a'],['reg','the-stack']]],#push
-    #['perform',['op','pair?',['reg','the-stack']]],
-    #['perform',['op','broken-heart?',['reg','the-stack']]],
-    
-    # gc-loop gc-flip then perform flip
-    # flip
-    #['gc-flip'],
-    #['perform',['op','flip']],
-    # --- 
-    #['perform',['op','cons',['reg','a'],['reg','the-stack']]], / cons 的时候记得设置 e0 
-    # ( n233 . p0 ) p0 -> (n233 . e0 ) start
-    
-    # stack over 
-    # test start 
-    #['assgin','b',['const','234']],
-    #['assgin','c',['const','1']],
-    #['perform',['op','-',['reg','b'],['reg','c']]],
-    #['assgin','a',['op','vector-ref',['reg','the-cars'],['reg','c']]],
-    #['perform',['op','vector-set',['reg','the-cars'],['reg','c'],['reg','b']]],
-    # set-car! 
-    #['assgin','a',['op','cons',['reg','b'],['reg','c']]],
-    
-    # test over 
-    
-    #['perform',['op','set-car',['reg','b'],['reg','c']]],# (set-car! <index> <value>)
-    #['perform',['op','set-cdr',['reg','b'],['reg','c']]],# (set-cdr! <index> <value>)
-    #    ['assgin','a',['const','95']],
-    #    ['assgin','b',['const','10']],
-    #['assgin','a',['op','read']],
-    #['assgin','b',['op','read']],
-    #['start'],
-    #['test',['op','<',['reg','a'],['reg','b']]],
-    #['branch',['label','done']],
-    #['assgin','a',['op','-',['reg','a'],['reg','b']]],
-    #['goto',['label','start']],
-    #['done'],
-    #['assgin','c',['reg','a']],
+    ['test',['op','=',['const','233'],['reg','a']]],
 )
 show(m)
 m.excute()
