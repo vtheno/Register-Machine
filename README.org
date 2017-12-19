@@ -1,0 +1,2 @@
+* Learning the register machine from the sicp chapter 5
+** And the gc-base.py changed and learn from http://cparrish.sewanee.edu/cs376/ class 24
