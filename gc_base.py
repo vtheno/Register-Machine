@@ -111,6 +111,7 @@ class gc(object):
     def define_sym(self,var,val):
         if self.sufficient_space_for(val):
             value = self.makeTypeData(val)
+            # namespace is self.root then can changed to dict map or other data struct 
             self.root.append( (var,value) )
         else:
             raise Error( "define-sym: insufficient space for {}".format(val))
@@ -118,6 +119,7 @@ class gc(object):
         loc = self.the_free
         self.the_free += 1
         print "store_list:",lst,loc
+        # there can change data type to py list
         if isinstance(lst.first,Cons):
             self.the_cars.set(loc,self.store_list(lst.first))
         else:
